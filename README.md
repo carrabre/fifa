@@ -1,8 +1,18 @@
+# FIFA Tracker
+
+A modern web application for tracking FIFA matches, player statistics, and team performance. Built with Next.js and Thirdweb for seamless Web3 integration.
+
+## Features
+
+- Connect your wallet to access personalized features
+- Track match results and statistics
+- View player performance metrics
+- Team management and analytics
+- Secure authentication with email and Google
+
 ## Getting Started
 
-This example demonstrates how to use thirdweb Auth with NextJS.
-
-To run the project, first clone this repository, and then run one of the following commands to install the dependencies:
+First, install the dependencies:
 
 ```bash
 npm install
@@ -10,13 +20,38 @@ npm install
 yarn
 ```
 
+Then, run the development server:
+
 ```bash
 npm run dev
 # or
 yarn dev
 ```
 
-Now, you can navigate to [http://localhost:3000](http://localhost:3000) to visit the client side page where you can connect a wallet, sign-in with ethereum and view the payload, and use the payload to authenticate with the backend.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Technology Stack
+
+- Next.js 15
+- React 19
+- Thirdweb for Web3 integration
+- AppChain for blockchain integration
+
+## Authentication
+
+The application uses Thirdweb's authentication system with the following features:
+- Email authentication
+- Google authentication
+- Wallet connection
+- Secure session management
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License.
 
 ## Learn More
 
