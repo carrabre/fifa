@@ -1,5 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
+// IMPORTANT NOTES ABOUT MATCH DELETION:
+// This application uses a hybrid approach to match deletion:
+// 1. Database deletion is attempted first using direct API and Supabase client
+// 2. If database deletion fails (which may happen due to permissions/constraints), 
+//    we use client-side filtering to hide deleted matches
+// 3. We track deleted match IDs in localStorage so they remain hidden after refresh
+// This approach ensures a good user experience even if the user lacks database delete permissions
+
 const supabaseUrl = 'https://glkeaqhxfizzrselcpgb.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdsa2VhcWh4Zml6enJzZWxjcGdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNjg4NjgsImV4cCI6MjA2Mjc0NDg2OH0.tGJP98jZ4KTFDlXHpbR7MezreyqG6pmnXB0lo8r0mIY';
 
@@ -333,6 +341,8 @@ export async function getMatches() {
     }
     
     // Filter out any matches that are in our deleted set
+    // This ensures that even if database deletion fails (which may happen due to permissions),
+    // the matches will still appear deleted to the user
     const filteredData = data.filter(match => !deletedMatchIds.has(match.id as number));
     
     console.log(`[GET MATCHES] Retrieved ${data.length} matches from Supabase, filtered to ${filteredData.length} after removing deleted matches`);
@@ -928,10 +938,10 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
     if (verifyError) {
       console.warn(`[DELETE MATCH] Error verifying deletion:`, JSON.stringify(verifyError));
     } else if (verifyData) {
-      console.log(`[DELETE MATCH] Note: Match ${matchId} still exists in database (likely due to RLS/permissions), but will be hidden in the UI`);
+      console.warn(`[DELETE MATCH] Note: Match ${matchId} still exists in database, but will be filtered client-side`);
       
       // Try one more aggressive deletion
-      console.log(`[DELETE MATCH] Attempting alternate deletion method for match ${matchId}`);
+      console.log(`[DELETE MATCH] Attempting forceful second deletion for match ${matchId}`);
       await supabase.from('matches').delete().eq('id', matchId);
       
       // Check again
@@ -942,8 +952,8 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
         .maybeSingle();
       
       if (recheckData) {
-        console.log(`[DELETE MATCH] Note: Match ${matchId} still exists in database after second attempt. This is likely a permissions issue with Supabase RLS.`);
-        console.log(`[DELETE MATCH] The match will still be filtered out in the UI using client-side tracking.`);
+        console.warn(`[DELETE MATCH] Note: Match ${matchId} still exists after second deletion attempt, likely due to permissions. Using client-side filtering instead.`);
+        // At this point the database deletion has failed, but we're still tracking it as deleted client-side
       } else {
         console.log(`[DELETE MATCH] Second deletion attempt successful - match ${matchId} is now gone`);
       }
