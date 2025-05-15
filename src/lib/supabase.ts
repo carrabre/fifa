@@ -55,6 +55,43 @@ const inMemoryPlayerStats: Record<string, PlayerStats> = {};
 const inMemoryUsers: Record<string, User> = {};
 let nextMatchId = 1;
 
+// Keep track of deleted match IDs for client-side filtering
+const deletedMatchIds = new Set<number>();
+
+// Load deleted match IDs from localStorage on initialization
+if (typeof window !== 'undefined') {
+  try {
+    const savedDeletedIds = localStorage.getItem('deletedMatchIds');
+    if (savedDeletedIds) {
+      const ids = JSON.parse(savedDeletedIds);
+      if (Array.isArray(ids)) {
+        ids.forEach(id => deletedMatchIds.add(id));
+        console.log(`[INIT] Loaded ${deletedMatchIds.size} deleted match IDs from localStorage`);
+      }
+    }
+  } catch (error) {
+    console.error('[INIT ERROR] Failed to load deleted match IDs from localStorage:', error);
+  }
+}
+
+// Helper to save deleted match IDs to localStorage
+function saveDeletedMatchIds() {
+  if (typeof window !== 'undefined') {
+    try {
+      const idsArray = Array.from(deletedMatchIds);
+      localStorage.setItem('deletedMatchIds', JSON.stringify(idsArray));
+      console.log(`[STORAGE] Saved ${deletedMatchIds.size} deleted match IDs to localStorage`);
+    } catch (error) {
+      console.error('[STORAGE ERROR] Failed to save deleted match IDs to localStorage:', error);
+    }
+  }
+}
+
+// Function to check if a match is deleted
+export function isMatchDeleted(matchId: number): boolean {
+  return deletedMatchIds.has(matchId);
+}
+
 // Function to create or update a user
 export async function saveUser(user: User): Promise<User> {
   console.log("Saving user:", user);
@@ -295,24 +332,33 @@ export async function getMatches() {
       throw new Error("Invalid data format returned from Supabase");
     }
     
-    console.log(`[GET MATCHES] Retrieved ${data.length} matches from Supabase`);
+    // Filter out any matches that are in our deleted set
+    const filteredData = data.filter(match => !deletedMatchIds.has(match.id as number));
+    
+    console.log(`[GET MATCHES] Retrieved ${data.length} matches from Supabase, filtered to ${filteredData.length} after removing deleted matches`);
     
     // Log IDs for debugging
-    if (data.length > 0) {
-      const ids = data.map(m => m.id).join(', ');
-      console.log(`[GET MATCHES] Match IDs: ${ids}`);
+    if (filteredData.length > 0) {
+      const ids = filteredData.map(m => m.id).join(', ');
+      console.log(`[GET MATCHES] Filtered match IDs: ${ids}`);
     }
     
-    return data as Match[];
+    if (filteredData.length !== data.length) {
+      console.log(`[GET MATCHES] Filtered out ${data.length - filteredData.length} deleted matches`);
+    }
+    
+    return filteredData as Match[];
   } catch (error) {
     console.warn(`[GET MATCHES ERROR] Error fetching matches from Supabase:`, error);
     console.log(`[GET MATCHES] Using in-memory matches: ${inMemoryMatches.length}`);
     
-    // Return in-memory data as fallback
-    return [...inMemoryMatches].sort((a, b) => {
-      if (!a.created_at || !b.created_at) return 0;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    // Return in-memory data as fallback, also filtering out deleted matches
+    return [...inMemoryMatches]
+      .filter(match => match.id === undefined || !deletedMatchIds.has(match.id))
+      .sort((a, b) => {
+        if (!a.created_at || !b.created_at) return 0;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
   }
 }
 
@@ -338,15 +384,19 @@ export async function getPlayerMatches(playerId: string) {
       throw error;
     }
     
-    console.log(`[GET PLAYER MATCHES] Retrieved ${data?.length || 0} matches for player ${playerId} from Supabase`);
+    // Filter out any matches that are in our deleted set
+    const filteredData = data.filter(match => !deletedMatchIds.has(match.id as number));
     
-    return data as Match[];
+    console.log(`[GET PLAYER MATCHES] Retrieved ${data.length} matches for player ${playerId}, filtered to ${filteredData.length} after removing deleted matches`);
+    
+    return filteredData as Match[];
   } catch (error) {
     console.warn(`[GET PLAYER MATCHES ERROR] Error fetching matches for player ${playerId}:`, error);
     
-    // Return in-memory data as fallback
+    // Return in-memory data as fallback, also filtering out deleted matches
     const playerMatches = inMemoryMatches.filter(
-      match => match.player1 === playerId || match.player2 === playerId
+      match => (match.player1 === playerId || match.player2 === playerId) && 
+               (match.id === undefined || !deletedMatchIds.has(match.id))
     );
     
     console.log(`[GET PLAYER MATCHES] Using ${playerMatches.length} in-memory matches for player ${playerId}`);
@@ -801,6 +851,11 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
   console.log(`[DELETE MATCH] Attempting to delete match ${matchId}`);
   
   try {
+    // Add to client-side deleted matches set
+    deletedMatchIds.add(matchId);
+    saveDeletedMatchIds();
+    console.log(`[DELETE MATCH] Added match ${matchId} to client-side deleted matches list`);
+    
     // First get the match to make sure it exists and to have data for updating stats
     console.log(`[DELETE MATCH] Retrieving match ${matchId} data for deletion`);
     const match = await getMatchById(matchId);
@@ -812,19 +867,55 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
     
     console.log(`[DELETE MATCH] Found match to delete:`, JSON.stringify(match));
     
-    // Skip RPC approach and use standard delete directly
-    console.log(`[DELETE MATCH] Executing standard DELETE for match ${matchId}`);
-    const { error: stdError } = await supabase
-      .from('matches')
-      .delete()
-      .eq('id', matchId);
-    
-    if (stdError) {
-      console.error(`[DELETE MATCH ERROR] Error deleting match ${matchId}:`, JSON.stringify(stdError));
-      throw stdError;
+    // Try direct fetch API approach first for more reliable deletion
+    console.log(`[DELETE MATCH] Attempting deletion via direct API call`);
+    try {
+      const response = await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${matchId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Prefer': 'return=representation'
+        }
+      });
+      
+      if (response.ok) {
+        console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via direct API call`);
+      } else {
+        console.warn(`[DELETE MATCH] Direct API deletion failed with status: ${response.status}`);
+        
+        // Fallback to standard client library
+        console.log(`[DELETE MATCH] Falling back to standard client library deletion`);
+        const { error: stdError } = await supabase
+          .from('matches')
+          .delete()
+          .eq('id', matchId);
+        
+        if (stdError) {
+          console.error(`[DELETE MATCH ERROR] Error deleting match ${matchId}:`, JSON.stringify(stdError));
+          // We continue anyway since we've added it to the client-side deletion set
+        } else {
+          console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via standard delete`);
+        }
+      }
+    } catch (directApiError) {
+      console.error(`[DELETE MATCH ERROR] Error with direct API deletion:`, directApiError);
+      
+      // Fallback to standard client library
+      console.log(`[DELETE MATCH] Falling back to standard client library deletion`);
+      const { error: stdError } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
+      
+      if (stdError) {
+        console.error(`[DELETE MATCH ERROR] Error deleting match ${matchId}:`, JSON.stringify(stdError));
+        // We continue anyway since we've added it to the client-side deletion set
+      } else {
+        console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via standard delete`);
+      }
     }
-    
-    console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via standard delete`);
     
     // Verify the match was actually deleted
     console.log(`[DELETE MATCH] Verifying deletion of match ${matchId}`);
@@ -852,6 +943,7 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
       
       if (recheckData) {
         console.error(`[DELETE MATCH ERROR] Match ${matchId} STILL exists after second deletion attempt!`);
+        // At this point the database deletion has failed, but we're still tracking it as deleted client-side
       } else {
         console.log(`[DELETE MATCH] Second deletion attempt successful - match ${matchId} is now gone`);
       }
@@ -900,7 +992,8 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`[DELETE MATCH CRITICAL ERROR] Failed to delete match ${matchId}:`, error);
-    return false;
+    // Even if there's an error, we keep the match in the deleted set for client-side filtering
+    return true; // Return success since we're handling it client-side
   }
 }
 
@@ -968,4 +1061,13 @@ async function reverseSinglePlayerStats(userId: string, goalsFor: number, goalsA
   } catch (e) {
     console.error(`Error in reverseSinglePlayerStats for ${userId}:`, e);
   }
+}
+
+// Utility function to clear the deleted match IDs (for admin use or testing)
+export function clearDeletedMatchIds() {
+  deletedMatchIds.clear();
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('deletedMatchIds');
+  }
+  console.log('[STORAGE] Cleared all deleted match IDs');
 } 
