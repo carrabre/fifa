@@ -769,80 +769,75 @@ export async function deleteUserProfile(walletAddress: string): Promise<boolean>
 
 // Function to delete a match
 export async function deleteMatch(matchId: number): Promise<boolean> {
-  console.log(`Attempting to delete match ${matchId}`);
+  console.log(`[DELETE MATCH] Attempting to delete match ${matchId}`);
   
   try {
     // First get the match to make sure it exists and to have data for updating stats
+    console.log(`[DELETE MATCH] Retrieving match ${matchId} data for deletion`);
     const match = await getMatchById(matchId);
     
     if (!match) {
-      console.warn(`No match found with ID ${matchId}`);
+      console.warn(`[DELETE MATCH ERROR] No match found with ID ${matchId}`);
       return false;
     }
     
-    let deleted = false;
+    console.log(`[DELETE MATCH] Found match to delete:`, JSON.stringify(match));
     
-    // Try using RPC method first if available
-    try {
-      const { data, error } = await supabase.rpc('delete_match_by_id', { match_id: matchId });
-      
-      if (!error && data === true) {
-        console.log(`Successfully deleted match ${matchId} via RPC`);
-        deleted = true;
-      } else if (error) {
-        console.warn(`Error with RPC delete match ${matchId}:`, JSON.stringify(error));
-      }
-    } catch (rpcError) {
-      console.warn(`Exception in RPC delete for match ${matchId}:`, rpcError);
+    // Skip RPC approach and use standard delete directly
+    console.log(`[DELETE MATCH] Executing standard DELETE for match ${matchId}`);
+    const { error: stdError } = await supabase
+      .from('matches')
+      .delete()
+      .eq('id', matchId);
+    
+    if (stdError) {
+      console.error(`[DELETE MATCH ERROR] Error deleting match ${matchId}:`, JSON.stringify(stdError));
+      throw stdError;
     }
     
-    // Fallback to standard delete if RPC didn't work
-    if (!deleted) {
-      const { error: stdError } = await supabase
-        .from('matches')
-        .delete()
-        .eq('id', matchId);
-      
-      if (stdError) {
-        console.warn(`Error deleting match ${matchId}:`, JSON.stringify(stdError));
-        throw stdError;
-      } else {
-        console.log(`Successfully deleted match ${matchId} via standard delete`);
-        deleted = true;
-      }
-    }
+    console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via standard delete`);
     
     // Also remove from in-memory fallback if exists
     const matchIndex = inMemoryMatches.findIndex(m => m.id === matchId);
     if (matchIndex >= 0) {
       inMemoryMatches.splice(matchIndex, 1);
+      console.log(`[DELETE MATCH] Removed match ${matchId} from in-memory storage`);
     }
     
     // Force clear any caches with multiple approaches
     try {
+      console.log(`[DELETE MATCH] Clearing potential Supabase caches`);
       // Clear potential Supabase cache with a dummy query
       await supabase.from('matches').select('count').limit(1);
       
+      // Add a small delay to ensure deletion is processed
+      console.log(`[DELETE MATCH] Adding delay for deletion processing`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Force database sync with multiple paths
+      console.log(`[DELETE MATCH] Forcing database sync`);
       await Promise.allSettled([
         supabase.from('matches').select('id').limit(1),
         supabase.from('player_stats').select('user_id').limit(1)
       ]);
     } catch (cacheError) {
-      console.warn("Error clearing caches:", cacheError);
+      console.warn(`[DELETE MATCH ERROR] Error clearing caches:`, cacheError);
     }
     
     // Reverse the stats for both players
+    console.log(`[DELETE MATCH] Updating player stats for player1=${match.player1} and player2=${match.player2}`);
     await reversePlayerStatsForMatch(match);
     
     // Force recalculate stats for both players to ensure consistency
+    console.log(`[DELETE MATCH] Recalculating stats for player1=${match.player1}`);
     await recalculatePlayerStats(match.player1);
+    console.log(`[DELETE MATCH] Recalculating stats for player2=${match.player2}`);
     await recalculatePlayerStats(match.player2);
     
-    console.log(`Successfully completed match ${matchId} deletion process`);
+    console.log(`[DELETE MATCH] Successfully completed match ${matchId} deletion process`);
     return true;
   } catch (error) {
-    console.error(`Failed to delete match ${matchId}:`, error);
+    console.error(`[DELETE MATCH CRITICAL ERROR] Failed to delete match ${matchId}:`, error);
     return false;
   }
 }
@@ -850,15 +845,19 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
 // Helper function to reverse the stats that were applied from a match
 async function reversePlayerStatsForMatch(match: Match) {
   try {
+    console.log(`[REVERSE STATS] Beginning stat reversal for match ${match.id}`);
+    
     // For player 1
+    console.log(`[REVERSE STATS] Reversing stats for player1=${match.player1}, score=${match.player1_score}`);
     await reverseSinglePlayerStats(match.player1, match.player1_score, match.player2_score);
     
     // For player 2
+    console.log(`[REVERSE STATS] Reversing stats for player2=${match.player2}, score=${match.player2_score}`);
     await reverseSinglePlayerStats(match.player2, match.player2_score, match.player1_score);
     
-    console.log(`Stats updated after match deletion`);
+    console.log(`[REVERSE STATS] Stats updated after match deletion`);
   } catch (error) {
-    console.error(`Error updating stats after match deletion:`, error);
+    console.error(`[REVERSE STATS ERROR] Error updating stats after match deletion:`, error);
   }
 }
 

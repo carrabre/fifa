@@ -138,29 +138,41 @@ export default function Dashboard() {
   const handleDeleteMatch = async () => {
     if (!matchToDelete) return;
     
+    console.log(`[UI] Starting match deletion for match ID: ${matchToDelete}`);
+    
     try {
       setDeleting(true);
+      console.log(`[UI] Calling API to delete match ${matchToDelete}`);
+      
       const success = await deleteMatch(matchToDelete);
+      
+      console.log(`[UI] Delete API returned: success=${success}`);
       
       if (success) {
         // Close modal
         setShowDeleteModal(false);
         setMatchToDelete(null);
         
-        // Filter out the deleted match from the current state
-        setRecentMatches(prev => prev.filter(match => match.id !== matchToDelete));
+        // Filter out the deleted match from the current state immediately
+        console.log(`[UI] Updating match list in React state`);
+        setRecentMatches(prevMatches => {
+          const newMatches = prevMatches.filter(match => match.id !== matchToDelete);
+          console.log(`[UI] Matches before: ${prevMatches.length}, after: ${newMatches.length}`);
+          return newMatches;
+        });
         
         // Refresh data to show updated matches and stats
+        console.log(`[UI] Refreshing data after deletion`);
         await loadUserData();
-        
-        // No forced page refresh anymore - rely on React state updates
+        console.log(`[UI] Data refresh complete`);
       } else {
-        console.error("Failed to delete match");
+        console.error(`[UI ERROR] Failed to delete match ${matchToDelete}`);
       }
     } catch (error) {
-      console.error("Error deleting match:", error);
+      console.error(`[UI ERROR] Error deleting match ${matchToDelete}:`, error);
     } finally {
       setDeleting(false);
+      console.log(`[UI] Match deletion process complete for ${matchToDelete}`);
     }
   };
 

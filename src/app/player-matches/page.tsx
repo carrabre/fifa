@@ -123,30 +123,42 @@ export default function PlayerMatchesPage() {
   const handleDeleteMatch = async () => {
     if (!matchToDelete) return;
     
+    console.log(`[UI:PlayerMatches] Starting match deletion for match ID: ${matchToDelete}`);
+    
     try {
       setDeleting(true);
+      console.log(`[UI:PlayerMatches] Calling API to delete match ${matchToDelete}`);
+      
       const success = await deleteMatch(matchToDelete);
+      
+      console.log(`[UI:PlayerMatches] Delete API returned: success=${success}`);
       
       if (success) {
         // Close modal
         setShowDeleteModal(false);
         setMatchToDelete(null);
         
-        // Filter out the deleted match from the current state
-        setMatches(prev => prev.filter(match => match.id !== matchToDelete));
+        // Filter out the deleted match from the current state immediately
+        console.log(`[UI:PlayerMatches] Updating match list in React state`);
+        setMatches(prevMatches => {
+          const newMatches = prevMatches.filter(match => match.id !== matchToDelete);
+          console.log(`[UI:PlayerMatches] Matches before: ${prevMatches.length}, after: ${newMatches.length}`);
+          return newMatches;
+        });
         
         // Refresh data to show updated matches and stats
+        console.log(`[UI:PlayerMatches] Refreshing data after deletion`);
         await loadPlayerMatchData();
-        
-        // No forced page refresh anymore - rely on React state updates
+        console.log(`[UI:PlayerMatches] Data refresh complete`);
       } else {
-        console.error("Failed to delete match");
+        console.error(`[UI:PlayerMatches ERROR] Failed to delete match ${matchToDelete}`);
         // Keep modal open to allow retry
       }
     } catch (error) {
-      console.error("Error deleting match:", error);
+      console.error(`[UI:PlayerMatches ERROR] Error deleting match ${matchToDelete}:`, error);
     } finally {
       setDeleting(false);
+      console.log(`[UI:PlayerMatches] Match deletion process complete for ${matchToDelete}`);
     }
   };
 

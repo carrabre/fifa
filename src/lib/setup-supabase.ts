@@ -31,15 +31,13 @@ export async function setupSupabaseTables() {
     // Setup player_stats table if needed
     await createPlayerStatsTable();
     
-    // Create the RPC function for match deletion
-    await createMatchDeletionFunction();
-    
     // Direct API test to check access
     try {
       console.log("Testing direct API access...");
-      const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+      const res = await fetch(`${supabaseUrl}/rest/v1/matches?select=id&limit=1`, {
         method: 'GET',
         headers: {
+          'Content-Type': 'application/json',
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`
         }
@@ -53,57 +51,12 @@ export async function setupSupabaseTables() {
       console.error("API test exception:", e);
     }
     
-    console.log("Supabase tables and functions setup complete");
+    console.log("Supabase tables setup complete");
     console.log("=== END SUPABASE SETUP DEBUG INFO ===");
     return true;
   } catch (err) {
     console.error("Error in Supabase setup:", err);
     return false;
-  }
-}
-
-// Function to create the match deletion RPC function
-async function createMatchDeletionFunction() {
-  try {
-    const { error } = await supabase.rpc('create_match_deletion_function');
-    
-    if (error && error.code !== '42P01' && !error.message.includes('already exists')) {
-      console.error("Error creating match deletion function:", error);
-      
-      // Try to create the function directly with raw SQL
-      try {
-        // Note: this will only work if the Supabase project has SQL execution enabled
-        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/execute_sql`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''}`
-          },
-          body: JSON.stringify({
-            sql: `
-              CREATE OR REPLACE FUNCTION delete_match_by_id(match_id INTEGER)
-              RETURNS BOOLEAN AS $$
-              DECLARE
-                success BOOLEAN;
-              BEGIN
-                DELETE FROM matches WHERE id = match_id;
-                GET DIAGNOSTICS success = ROW_COUNT;
-                RETURN success > 0;
-              END;
-              $$ LANGUAGE plpgsql;
-            `
-          })
-        });
-        console.log("Created match deletion function via SQL API");
-      } catch (sqlError) {
-        console.error("Failed to create match deletion function via SQL API:", sqlError);
-      }
-    } else {
-      console.log("Match deletion function already exists or was created successfully");
-    }
-  } catch (e) {
-    console.error("Error creating match deletion function:", e);
   }
 }
 
