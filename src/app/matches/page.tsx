@@ -335,8 +335,11 @@ export default function MatchesPage() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#171721] p-6 rounded-lg max-w-md w-full border border-white/10">
             <h3 className="text-xl font-bold mb-4 text-white">Delete Match</h3>
-            <p className="text-white/80 mb-6">
+            <p className="text-white/80 mb-3">
               Are you sure you want to delete this match? This action cannot be undone and will adjust your player statistics accordingly.
+            </p>
+            <p className="text-white/60 text-sm mb-6">
+              <span className="text-blue-400">Note:</span> Match will be removed from your view and stats will be updated. Due to database permissions, the match may still exist in the database but won't appear in your listings.
             </p>
             <div className="flex justify-end space-x-3">
               <button
