@@ -129,21 +129,7 @@ export default function MatchesPage() {
         // Refresh data to show updated matches and stats
         await loadMatchData();
         
-        // Force a complete page refresh after a delay
-        setTimeout(() => {
-          console.log("Forcing page refresh to update UI");
-          window.location.href = window.location.href;
-        }, 1000);
-        
-        // Set up a fallback refresh in case the first one doesn't work
-        setTimeout(() => {
-          // Check if the deleted match is still in the list
-          const matchStillExists = matches.some(match => match.id === matchToDelete);
-          if (matchStillExists) {
-            console.log("Match still exists in UI, forcing another refresh");
-            window.location.reload();
-          }
-        }, 2000);
+        // No forced page refresh anymore - rely on React state updates
       } else {
         console.error("Failed to delete match");
       }
