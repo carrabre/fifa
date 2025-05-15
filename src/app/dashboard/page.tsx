@@ -18,22 +18,30 @@ export default function Dashboard() {
   const [matchToDelete, setMatchToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const loadUserData = async () => {
+  const loadUserData = async (forceRefresh = false) => {
     if (!account) {
       return;
     }
     
     try {
+      console.log(`[UI:Dashboard] Loading user data with forceRefresh=${forceRefresh}`);
+      
+      // If forcing refresh, add a delay to ensure database is in sync
+      if (forceRefresh) {
+        console.log("[UI:Dashboard] Force refresh requested, adding delay");
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
       // Setup Supabase tables if they don't exist
       await setupSupabaseTables();
       
       // Always fetch fresh user profile data
       const userProfile = await getUserByWallet(account.address);
-      console.log('User profile retrieved:', userProfile);
+      console.log('[UI:Dashboard] User profile retrieved:', userProfile);
       
       if (userProfile) {
         setDisplayName(userProfile.display_name);
-        console.log('Setting display name to:', userProfile.display_name);
+        console.log('[UI:Dashboard] Setting display name to:', userProfile.display_name);
       } else {
         // Reset display name if no profile found
         setDisplayName(null);
@@ -45,7 +53,7 @@ export default function Dashboard() {
 
       // If stats show 0 total games, create an initial player_stats record
       if (stats.total_games === 0) {
-        console.log("Initializing player stats in database...");
+        console.log("[UI:Dashboard] Initializing player stats in database...");
         try {
           // Call updatePlayerStats with a dummy match to ensure the stats are created
           await updatePlayerStats({
@@ -59,20 +67,26 @@ export default function Dashboard() {
           const refreshedStats = await getPlayerStats(account.address);
           setPlayerStats(refreshedStats);
         } catch (error) {
-          console.error("Error initializing player stats:", error);
+          console.error("[UI:Dashboard ERROR] Error initializing player stats:", error);
         }
       }
 
-      // Get recent matches
+      // Get recent matches with cache busting
+      console.log("[UI:Dashboard] Fetching recent matches");
       const matches = await getMatches();
+      console.log(`[UI:Dashboard] Got ${matches.length} total matches`);
+      
       // Filter matches where this player participated
       const userMatches = matches.filter(match => 
         match.player1 === account.address || match.player2 === account.address
       );
+      console.log(`[UI:Dashboard] Filtered to ${userMatches.length} user matches`);
+      
       // Take only the 5 most recent ones
       setRecentMatches(userMatches.slice(0, 5));
+      console.log(`[UI:Dashboard] Set ${Math.min(userMatches.length, 5)} recent matches`);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("[UI:Dashboard ERROR] Error fetching data:", error);
     } finally {
       setLoading(false);
     }
@@ -163,7 +177,7 @@ export default function Dashboard() {
         
         // Refresh data to show updated matches and stats
         console.log(`[UI] Refreshing data after deletion`);
-        await loadUserData();
+        await loadUserData(true); // Force a refresh
         console.log(`[UI] Data refresh complete`);
       } else {
         console.error(`[UI ERROR] Failed to delete match ${matchToDelete}`);
@@ -184,7 +198,7 @@ export default function Dashboard() {
           <div className="h-1 w-24 bg-[rgb(var(--accent-color))]"></div>
         </div>
         <button 
-          onClick={loadUserData} 
+          onClick={() => loadUserData(true)} 
           className="ea-button-secondary flex items-center"
           disabled={loading}
         >

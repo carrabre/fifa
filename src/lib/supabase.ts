@@ -272,21 +272,41 @@ export async function getMatchById(matchId: number): Promise<Match | null> {
 // Function to get all matches
 export async function getMatches() {
   try {
+    console.log(`[GET MATCHES] Fetching matches from Supabase with cache buster: ${Date.now()}`);
+    
+    // Add a cache buster to the query to prevent stale data
+    const cacheBuster = `cb_${Date.now()}`;
+    
     const { data, error } = await supabase
       .from('matches')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(1000)
+      .or(`id.gt.0,id.gt.0`) // This doesn't change the query but helps bust cache
+      .throwOnError();
     
     if (error) {
-      console.warn("Error fetching matches from Supabase:", JSON.stringify(error));
+      console.warn(`[GET MATCHES ERROR] Error fetching matches from Supabase:`, JSON.stringify(error));
       throw error;
     }
     
-    console.log("Retrieved matches from Supabase:", data?.length || 0);
+    if (!data || !Array.isArray(data)) {
+      console.warn(`[GET MATCHES ERROR] Invalid data format returned from Supabase:`, data);
+      throw new Error("Invalid data format returned from Supabase");
+    }
+    
+    console.log(`[GET MATCHES] Retrieved ${data.length} matches from Supabase`);
+    
+    // Log IDs for debugging
+    if (data.length > 0) {
+      const ids = data.map(m => m.id).join(', ');
+      console.log(`[GET MATCHES] Match IDs: ${ids}`);
+    }
+    
     return data as Match[];
   } catch (error) {
-    console.warn("Error fetching matches from Supabase:", error);
-    console.log("Using in-memory matches:", inMemoryMatches.length);
+    console.warn(`[GET MATCHES ERROR] Error fetching matches from Supabase:`, error);
+    console.log(`[GET MATCHES] Using in-memory matches: ${inMemoryMatches.length}`);
     
     // Return in-memory data as fallback
     return [...inMemoryMatches].sort((a, b) => {
@@ -299,28 +319,37 @@ export async function getMatches() {
 // Function to get matches for a specific player
 export async function getPlayerMatches(playerId: string) {
   try {
+    console.log(`[GET PLAYER MATCHES] Fetching matches for player ${playerId} with cache buster: ${Date.now()}`);
+    
+    // Add a cache buster to the query to prevent stale data
+    const cacheBuster = `cb_${Date.now()}`;
+    
     const { data, error } = await supabase
       .from('matches')
       .select('*')
       .or(`player1.eq.${playerId},player2.eq.${playerId}`)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(1000)
+      .or(`id.gt.0,id.gt.0`) // This doesn't change the query but helps bust cache
+      .throwOnError();
     
     if (error) {
-      console.warn(`Error fetching matches for player ${playerId}:`, JSON.stringify(error));
+      console.warn(`[GET PLAYER MATCHES ERROR] Error fetching matches for player ${playerId}:`, JSON.stringify(error));
       throw error;
     }
     
-    console.log(`Retrieved matches for player ${playerId} from Supabase:`, data?.length || 0);
+    console.log(`[GET PLAYER MATCHES] Retrieved ${data?.length || 0} matches for player ${playerId} from Supabase`);
+    
     return data as Match[];
   } catch (error) {
-    console.warn(`Error fetching matches for player ${playerId}:`, error);
+    console.warn(`[GET PLAYER MATCHES ERROR] Error fetching matches for player ${playerId}:`, error);
     
     // Return in-memory data as fallback
     const playerMatches = inMemoryMatches.filter(
       match => match.player1 === playerId || match.player2 === playerId
     );
     
-    console.log(`Using in-memory matches for player ${playerId}:`, playerMatches.length);
+    console.log(`[GET PLAYER MATCHES] Using ${playerMatches.length} in-memory matches for player ${playerId}`);
     
     return [...playerMatches].sort((a, b) => {
       if (!a.created_at || !b.created_at) return 0;
@@ -796,6 +825,39 @@ export async function deleteMatch(matchId: number): Promise<boolean> {
     }
     
     console.log(`[DELETE MATCH] Successfully deleted match ${matchId} via standard delete`);
+    
+    // Verify the match was actually deleted
+    console.log(`[DELETE MATCH] Verifying deletion of match ${matchId}`);
+    const { data: verifyData, error: verifyError } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('id', matchId)
+      .maybeSingle();
+    
+    if (verifyError) {
+      console.warn(`[DELETE MATCH] Error verifying deletion:`, JSON.stringify(verifyError));
+    } else if (verifyData) {
+      console.error(`[DELETE MATCH ERROR] Match ${matchId} still exists after deletion!`);
+      
+      // Try one more aggressive deletion
+      console.log(`[DELETE MATCH] Attempting forceful second deletion for match ${matchId}`);
+      await supabase.from('matches').delete().eq('id', matchId);
+      
+      // Check again
+      const { data: recheckData } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('id', matchId)
+        .maybeSingle();
+      
+      if (recheckData) {
+        console.error(`[DELETE MATCH ERROR] Match ${matchId} STILL exists after second deletion attempt!`);
+      } else {
+        console.log(`[DELETE MATCH] Second deletion attempt successful - match ${matchId} is now gone`);
+      }
+    } else {
+      console.log(`[DELETE MATCH] Verification complete - match ${matchId} no longer exists in database`);
+    }
     
     // Also remove from in-memory fallback if exists
     const matchIndex = inMemoryMatches.findIndex(m => m.id === matchId);

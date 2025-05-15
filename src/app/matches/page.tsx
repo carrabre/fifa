@@ -38,13 +38,23 @@ export default function MatchesPage() {
   }, [account, router]);
 
   // Function to load matches data
-  const loadMatchData = async () => {
+  const loadMatchData = async (forceRefresh = false) => {
     try {
       setRefreshing(true);
+      console.log(`[UI:Matches] Loading match data with forceRefresh=${forceRefresh}`);
+      
+      // If forcing refresh, add a delay to ensure database is in sync
+      if (forceRefresh) {
+        console.log("[UI:Matches] Force refresh requested, adding delay");
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
       const matchData = await getMatches();
+      
+      console.log(`[UI:Matches] Loaded ${matchData.length} matches from API`);
       setMatches(matchData);
     } catch (error) {
-      console.error("Error fetching matches:", error);
+      console.error("[UI:Matches ERROR] Error fetching matches:", error);
     } finally {
       setRefreshing(false);
     }
@@ -139,7 +149,7 @@ export default function MatchesPage() {
         
         // Refresh data to show updated matches and stats
         console.log(`[UI:Matches] Refreshing data after deletion`);
-        await loadMatchData();
+        await loadMatchData(true); // Force a refresh
         console.log(`[UI:Matches] Data refresh complete`);
       } else {
         console.error(`[UI:Matches ERROR] Failed to delete match ${matchToDelete}`);

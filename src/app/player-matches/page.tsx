@@ -28,22 +28,32 @@ export default function PlayerMatchesPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Function to load player match data
-  const loadPlayerMatchData = async () => {
+  const loadPlayerMatchData = async (forceRefresh = false) => {
     if (!playerId) return;
     
     try {
       setRefreshing(true);
+      console.log(`[UI:PlayerMatches] Loading player match data for ${playerId} with forceRefresh=${forceRefresh}`);
+      
+      // If forcing refresh, add a delay to ensure database is in sync
+      if (forceRefresh) {
+        console.log("[UI:PlayerMatches] Force refresh requested, adding delay");
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
       
       // Get player name
       const userData = await getUserByWallet(playerId);
       if (userData) {
         setPlayerName(userData.display_name);
+        console.log(`[UI:PlayerMatches] Set player name to ${userData.display_name}`);
       } else {
         setPlayerName(`${playerId.slice(0, 6)}...${playerId.slice(-4)}`);
+        console.log(`[UI:PlayerMatches] Using abbreviated wallet as player name`);
       }
       
       // Get player matches
       const matchData = await getPlayerMatches(playerId);
+      console.log(`[UI:PlayerMatches] Retrieved ${matchData.length} matches for player`);
       setMatches(matchData);
       
       // Calculate stats from matches
@@ -74,8 +84,10 @@ export default function PlayerMatchesPage() {
         goalsAgainst
       });
       
+      console.log(`[UI:PlayerMatches] Updated player stats: W${wins}/L${losses}/D${draws}`);
+      
     } catch (error) {
-      console.error("Error fetching player matches:", error);
+      console.error(`[UI:PlayerMatches ERROR] Error fetching player matches:`, error);
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -107,7 +119,7 @@ export default function PlayerMatchesPage() {
   }, [account, router, playerId]);
 
   const handleRefresh = () => {
-    loadPlayerMatchData();
+    loadPlayerMatchData(true);
   };
 
   const confirmDelete = (matchId: number) => {
@@ -148,7 +160,7 @@ export default function PlayerMatchesPage() {
         
         // Refresh data to show updated matches and stats
         console.log(`[UI:PlayerMatches] Refreshing data after deletion`);
-        await loadPlayerMatchData();
+        await loadPlayerMatchData(true); // Force a refresh
         console.log(`[UI:PlayerMatches] Data refresh complete`);
       } else {
         console.error(`[UI:PlayerMatches ERROR] Failed to delete match ${matchToDelete}`);
