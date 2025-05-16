@@ -9,17 +9,20 @@
 		"lint": "next lint"
 	},
 	"dependencies": {
+		"@supabase/supabase-js": "^2.49.4",
 		"next": "^15",
 		"react": "^19",
+		"react-confetti": "^6.4.0",
 		"react-dom": "^19",
 		"thirdweb": "^5"
 	},
 	"devDependencies": {
 		"@types/node": "22.13.12",
 		"@types/react": "^19",
-		"typescript": "^5.8.2",
 		"autoprefixer": "^10.4.14",
 		"postcss": "^8.4.27",
-		"tailwindcss": "^3.3.3"
-	}
+		"tailwindcss": "^3.3.3",
+		"typescript": "^5.8.2"
+	},
+	"packageManager": "pnpm@10.11.0"
 }
