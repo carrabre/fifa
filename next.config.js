@@ -6,6 +6,9 @@ const nextConfig = {
 		return config;
 	},
 	swcMinify: false,
+	experimental: {
+		serverActions: false,
+	},
 };
 
 module.exports = nextConfig;
