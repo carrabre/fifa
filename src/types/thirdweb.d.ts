@@ -12,4 +12,8 @@ declare module "thirdweb/react" {
   export const ThirdwebProvider: any;
   export const ConnectButton: any;
   export function useActiveAccount(): any;
+}
+
+declare module "thirdweb" {
+  export const createThirdwebClient: any;
 } 
