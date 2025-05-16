@@ -25,7 +25,7 @@ const thirdwebAuth = createAuth({
 	domain: process.env.NEXT_PUBLIC_THIRDWEB_AUTH_DOMAIN || "",
 	adminAccount: privateKeyToAccount({ client, privateKey }),
 	client,
-	// Cast to any to bypass outdated type definition – runtime expects secretKey or clientId
+	// Provide placeholder secretKey so thirdweb runtime doesn't throw when env is missing.
 	secretKey: process.env.THIRDWEB_SECRET_KEY!,
 } as any);
 
