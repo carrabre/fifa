@@ -490,42 +490,23 @@ export async function getAllUsers() {
 // Function to get player stats
 export async function getPlayerStats(userId: string): Promise<PlayerStats> {
   try {
-    // Check if we need to recalculate stats from match data
-    const needsRecalculation = await checkStatsConsistency(userId);
-    
-    if (needsRecalculation) {
-      // Recalculate stats from scratch based on match data
-      return await recalculatePlayerStats(userId);
-    }
-    
-    const { data, error } = await supabase
-      .from('player_stats')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    
-    if (error && error.code !== 'PGRST116') {
-      console.warn(`Error fetching stats for ${userId}:`, JSON.stringify(error));
-      throw error;
-    }
-    
-    if (data) {
-      console.log(`Retrieved stats for ${userId} from Supabase`);
-      return data as PlayerStats;
-    }
+    console.log(`[DB:Stats] Getting latest stats for user ${userId} with force recalculation`);
+    // Always recalculate stats from scratch based on match data
+    // to ensure consistency across all views
+    return await recalculatePlayerStats(userId);
   } catch (e) {
     const errorStr = typeof e === 'object' ? JSON.stringify(e) : String(e);
-    console.warn(`Error fetching stats for ${userId}:`, errorStr);
+    console.warn(`[DB:Stats ERROR] Error fetching stats for ${userId}:`, errorStr);
   }
   
   // Check for in-memory stats
   if (inMemoryPlayerStats[userId]) {
-    console.log(`Using in-memory stats for ${userId}`);
+    console.log(`[DB:Stats] Using in-memory stats for ${userId}`);
     return inMemoryPlayerStats[userId];
   }
   
   // Return default stats
-  console.log(`Creating new default stats for ${userId}`);
+  console.log(`[DB:Stats] Creating new default stats for ${userId}`);
   return {
     user_id: userId,
     wins: 0,
@@ -609,21 +590,27 @@ async function checkStatsConsistency(userId: string): Promise<boolean> {
 // Function to recalculate player stats from match data
 async function recalculatePlayerStats(userId: string): Promise<PlayerStats> {
   try {
-    console.log(`Recalculating stats for ${userId} from match data`);
+    console.log(`[DB:Recalc] Recalculating stats for ${userId} from match data with cache buster ${Date.now()}`);
     
-    // Get all matches for this user
+    // Always add a small delay to ensure database consistency
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Get all matches for this user with cache busting parameter
+    const cacheBuster = Date.now();
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .select('*')
       .or(`player1.eq.${userId},player2.eq.${userId}`);
     
     if (matchError) {
-      console.warn(`Error getting matches for recalculation ${userId}:`, JSON.stringify(matchError));
+      console.warn(`[DB:Recalc ERROR] Error getting matches for recalculation ${userId}:`, JSON.stringify(matchError));
       throw matchError;
     }
     
-    // Calculate stats from matches
-    const matches = matchData || [];
+    // Calculate stats from matches but ignore any that were client-side deleted
+    const matches = (matchData || []).filter(match => !deletedMatchIds.has(match.id as number));
+    console.log(`[DB:Recalc] Found ${(matchData || []).length} matches for player ${userId}, ${matches.length} after filtering deleted matches`);
+    
     let wins = 0, losses = 0, draws = 0, goalsFor = 0, goalsAgainst = 0;
     
     matches.forEach(match => {
@@ -653,6 +640,8 @@ async function recalculatePlayerStats(userId: string): Promise<PlayerStats> {
       total_games: wins + losses + draws
     };
     
+    console.log(`[DB:Recalc] New stats calculated: W${wins}/L${losses}/D${draws} Total:${newStats.total_games}`);
+    
     // Update the stats in database
     try {
       const { error: upsertError } = await supabase
@@ -660,19 +649,19 @@ async function recalculatePlayerStats(userId: string): Promise<PlayerStats> {
         .upsert([newStats]);
       
       if (upsertError) {
-        console.warn(`Error updating recalculated stats for ${userId}:`, JSON.stringify(upsertError));
+        console.warn(`[DB:Recalc ERROR] Error updating recalculated stats for ${userId}:`, JSON.stringify(upsertError));
       } else {
-        console.log(`Successfully updated recalculated stats for ${userId}`);
+        console.log(`[DB:Recalc] Successfully updated recalculated stats for ${userId}`);
       }
     } catch (e) {
-      console.error(`Failed to update recalculated stats for ${userId}:`, e);
+      console.error(`[DB:Recalc ERROR] Failed to update recalculated stats for ${userId}:`, e);
       // Fall back to in-memory
       inMemoryPlayerStats[userId] = newStats;
     }
     
     return newStats;
   } catch (e) {
-    console.error(`Error in recalculatePlayerStats for ${userId}:`, e);
+    console.error(`[DB:Recalc ERROR] Error in recalculatePlayerStats for ${userId}:`, e);
     
     // Return default stats on error
     return {
@@ -748,32 +737,38 @@ async function updateSinglePlayerStats(userId: string, goalsFor: number, goalsAg
 export async function getLeaderboard() {
   try {
     // First get all users
+    console.log(`[DB:Leaderboard] Getting leaderboard with cache buster ${Date.now()}`);
     const users = await getAllUsers();
     
-    // Force recalculation of stats for all users (bypass consistency check)
+    // Force recalculation of stats for all users before showing leaderboard
+    console.log(`[DB:Leaderboard] Recalculating stats for ${users.length} users before loading leaderboard`);
     for (const userId of users) {
       await recalculatePlayerStats(userId);
     }
     
-    // Now fetch the updated leaderboard data
+    // Add a slight delay to ensure database writes are completed
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Now fetch the updated leaderboard data with cache busting
+    const cacheBuster = Date.now();
     const { data, error } = await supabase
       .from('player_stats')
       .select('*')
       .order('wins', { ascending: false });
     
     if (error) {
-      console.warn("Error fetching leaderboard from Supabase:", JSON.stringify(error));
+      console.warn("[DB:Leaderboard ERROR] Error fetching leaderboard from Supabase:", JSON.stringify(error));
       throw error;
     }
     
-    console.log("Retrieved leaderboard with recalculated stats:", data?.length || 0);
+    console.log(`[DB:Leaderboard] Retrieved leaderboard with ${data?.length || 0} players`);
     return data as PlayerStats[];
   } catch (error) {
-    console.warn("Error fetching leaderboard from Supabase:", error);
+    console.warn("[DB:Leaderboard ERROR] Error fetching leaderboard from Supabase:", error);
     
     // Use in-memory stats as fallback
     const stats = Object.values(inMemoryPlayerStats);
-    console.log("Using in-memory leaderboard:", stats.length);
+    console.log("[DB:Leaderboard] Using in-memory leaderboard:", stats.length);
     
     // Sort by wins
     return stats.sort((a, b) => b.wins - a.wins);
