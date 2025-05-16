@@ -116,12 +116,12 @@ export default function Navbar() {
                 sponsorGas: true,
               }}
               auth={{
-                isLoggedIn: async (address) => {
+                isLoggedIn: async (address: string) => {
                   const result = await isLoggedIn();
                   setAuthenticated(result);
                   return result;
                 },
-                doLogin: async (params) => {
+                doLogin: async (params: any) => {
                   await login(params);
                   setAuthenticated(true);
                   
@@ -132,7 +132,7 @@ export default function Navbar() {
                     }, 500);
                   }
                 },
-                getLoginPayload: async ({ address }) => generatePayload({ address, chainId: 466 }),
+                getLoginPayload: async ({ address }: { address: string }) => generatePayload({ address, chainId: 466 }),
                 doLogout: async () => {
                   await logout();
                   setAuthenticated(false);
