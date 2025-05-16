@@ -8,6 +8,7 @@ const nextConfig = {
 	},
 	swcMinify: false,
 	experimental: {
+		serverActions: {},
 	},
 };
 
