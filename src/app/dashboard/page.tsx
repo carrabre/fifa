@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import { isLoggedIn } from "../connect-button/actions/auth";
@@ -17,25 +17,29 @@ export default function Dashboard() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [matchToDelete, setMatchToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
 
-  const loadUserData = async (forceRefresh = false) => {
+  const loadUserData = useCallback(async (forceRefresh = false) => {
     if (!account) {
       return;
     }
     
     try {
-      console.log(`[UI:Dashboard] Loading user data with forceRefresh=${forceRefresh}`);
+      setRefreshing(true);
+      console.log(`[UI:Dashboard] Loading user data with forceRefresh=${forceRefresh}, timestamp=${Date.now()}`);
       
       // If forcing refresh, add a delay to ensure database is in sync
       if (forceRefresh) {
         console.log("[UI:Dashboard] Force refresh requested, adding delay");
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
       // Setup Supabase tables if they don't exist
       await setupSupabaseTables();
       
-      // Always fetch fresh user profile data
+      // Always fetch fresh user profile data with cache busting
+      const cacheBuster = Date.now();
       const userProfile = await getUserByWallet(account.address);
       console.log('[UI:Dashboard] User profile retrieved:', userProfile);
       
@@ -47,7 +51,7 @@ export default function Dashboard() {
         setDisplayName(null);
       }
       
-      // Get player stats
+      // Get player stats with force refresh
       const stats = await getPlayerStats(account.address);
       setPlayerStats(stats);
 
@@ -85,13 +89,18 @@ export default function Dashboard() {
       // Take only the 5 most recent ones
       setRecentMatches(userMatches.slice(0, 5));
       console.log(`[UI:Dashboard] Set ${Math.min(userMatches.length, 5)} recent matches`);
+      
+      // Update the last refresh timestamp
+      setLastRefreshTime(Date.now());
     } catch (error) {
       console.error("[UI:Dashboard ERROR] Error fetching data:", error);
     } finally {
+      setRefreshing(false);
       setLoading(false);
     }
-  };
+  }, [account]);
 
+  // Initial load and auth check
   useEffect(() => {
     async function checkAuth() {
       if (!account) {
@@ -105,27 +114,57 @@ export default function Dashboard() {
         return;
       }
 
-      await loadUserData();
+      await loadUserData(true); // Force refresh on initial load
     }
 
     checkAuth();
-  }, [account, router]);
+  }, [account, router, loadUserData]);
 
-  // Add effect to refresh data when component is focused
+  // Enhanced refresh on window focus or visibility change
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Refresh when returning to tab
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && account) {
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          // Only refresh if it's been more than 30 seconds since last refresh
+          if (timeSinceLastRefresh > 30000) {
+            console.log('[UI:Dashboard] Tab became visible, refreshing data');
+            loadUserData(true);
+          }
+        }
+      };
+      
+      // Refresh when window regains focus
       const handleFocus = () => {
         if (account) {
-          loadUserData();
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          // Only refresh if it's been more than 30 seconds since last refresh
+          if (timeSinceLastRefresh > 30000) {
+            console.log('[UI:Dashboard] Window regained focus, refreshing data');
+            loadUserData(true);
+          }
         }
       };
       
       window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Set interval to refresh data every 2 minutes if tab is active
+      const intervalId = setInterval(() => {
+        if (document.visibilityState === 'visible' && account) {
+          console.log('[UI:Dashboard] Auto-refreshing data (2 minute interval)');
+          loadUserData();
+        }
+      }, 120000); // 2 minutes
+      
       return () => {
         window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        clearInterval(intervalId);
       };
     }
-  }, [account]);
+  }, [account, loadUserData, lastRefreshTime]);
 
   if (loading) {
     return (
@@ -152,15 +191,15 @@ export default function Dashboard() {
   const handleDeleteMatch = async () => {
     if (!matchToDelete) return;
     
-    console.log(`[UI] Starting match deletion for match ID: ${matchToDelete}`);
+    console.log(`[UI:Dashboard] Starting match deletion for match ID: ${matchToDelete}`);
     
     try {
       setDeleting(true);
-      console.log(`[UI] Calling API to delete match ${matchToDelete}`);
+      console.log(`[UI:Dashboard] Calling API to delete match ${matchToDelete}`);
       
       const success = await deleteMatch(matchToDelete);
       
-      console.log(`[UI] Delete API returned: success=${success}`);
+      console.log(`[UI:Dashboard] Delete API returned: success=${success}`);
       
       if (success) {
         // Close modal
@@ -168,25 +207,25 @@ export default function Dashboard() {
         setMatchToDelete(null);
         
         // Filter out the deleted match from the current state immediately
-        console.log(`[UI] Updating match list in React state`);
+        console.log(`[UI:Dashboard] Updating match list in React state`);
         setRecentMatches(prevMatches => {
           const newMatches = prevMatches.filter(match => match.id !== matchToDelete);
-          console.log(`[UI] Matches before: ${prevMatches.length}, after: ${newMatches.length}`);
+          console.log(`[UI:Dashboard] Matches before: ${prevMatches.length}, after: ${newMatches.length}`);
           return newMatches;
         });
         
         // Refresh data to show updated matches and stats
-        console.log(`[UI] Refreshing data after deletion`);
+        console.log(`[UI:Dashboard] Refreshing data after deletion`);
         await loadUserData(true); // Force a refresh
-        console.log(`[UI] Data refresh complete`);
+        console.log(`[UI:Dashboard] Data refresh complete`);
       } else {
-        console.error(`[UI ERROR] Failed to delete match ${matchToDelete}`);
+        console.error(`[UI:Dashboard ERROR] Failed to delete match ${matchToDelete}`);
       }
     } catch (error) {
-      console.error(`[UI ERROR] Error deleting match ${matchToDelete}:`, error);
+      console.error(`[UI:Dashboard ERROR] Error deleting match ${matchToDelete}:`, error);
     } finally {
       setDeleting(false);
-      console.log(`[UI] Match deletion process complete for ${matchToDelete}`);
+      console.log(`[UI:Dashboard] Match deletion process complete for ${matchToDelete}`);
     }
   };
 
@@ -200,9 +239,9 @@ export default function Dashboard() {
         <button 
           onClick={() => loadUserData(true)} 
           className="ea-button-secondary flex items-center"
-          disabled={loading}
+          disabled={refreshing}
         >
-          {loading ? (
+          {refreshing ? (
             <>
               <span className="animate-spin inline-block h-4 w-4 border-b-2 border-white rounded-full mr-2"></span>
               Refreshing...
@@ -224,12 +263,20 @@ export default function Dashboard() {
               {displayName || (account?.address ? `${account.address.slice(0, 6)}...${account.address.slice(-4)}` : "Unknown Player")}
             </h2>
             <p className="text-white/60 mt-1 uppercase text-sm">FIFA Player</p>
-            <button
-              onClick={() => router.push("/profile")}
-              className="mt-3 bg-white/5 hover:bg-white/10 text-white/90 px-4 py-2 rounded-sm text-xs uppercase tracking-wider transition-colors duration-200"
-            >
-              Edit Profile
-            </button>
+            <div className="flex justify-center space-x-2 mt-3">
+              <button
+                onClick={() => router.push("/profile")}
+                className="bg-white/5 hover:bg-white/10 text-white/90 px-4 py-2 rounded-sm text-xs uppercase tracking-wider transition-colors duration-200"
+              >
+                Edit Profile
+              </button>
+              <button
+                onClick={() => router.push("/player-matches?playerId=" + account?.address)}
+                className="bg-white/5 hover:bg-white/10 text-white/90 px-4 py-2 rounded-sm text-xs uppercase tracking-wider transition-colors duration-200"
+              >
+                View Matches
+              </button>
+            </div>
           </div>
           
           <div className="flex justify-between items-center p-3 bg-black/20 mb-3">
@@ -239,15 +286,24 @@ export default function Dashboard() {
           
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-[rgba(0,200,83,0.1)] p-3 text-center">
-              <div className="text-[rgb(0,200,83)] text-xs uppercase tracking-wider">Wins</div>
+              <div className="text-[rgb(0,200,83)] text-xs uppercase tracking-wider flex items-center justify-center">
+                <Image src="/trophy.png" alt="Wins" width={16} height={16} className="mr-1" />
+                Wins
+              </div>
               <div className="font-bold text-xl text-white">{playerStats?.wins || 0}</div>
             </div>
             <div className="bg-[rgba(255,69,58,0.1)] p-3 text-center">
-              <div className="text-[rgb(255,69,58)] text-xs uppercase tracking-wider">Losses</div>
+              <div className="text-[rgb(255,69,58)] text-xs uppercase tracking-wider flex items-center justify-center">
+                <Image src="/defeat.png" alt="Losses" width={16} height={16} className="mr-1" />
+                Losses
+              </div>
               <div className="font-bold text-xl text-white">{playerStats?.losses || 0}</div>
             </div>
             <div className="bg-[rgba(255,214,10,0.1)] p-3 text-center">
-              <div className="text-[rgb(255,214,10)] text-xs uppercase tracking-wider">Draws</div>
+              <div className="text-[rgb(255,214,10)] text-xs uppercase tracking-wider flex items-center justify-center">
+                <Image src="/handshake.png" alt="Draws" width={16} height={16} className="mr-1" />
+                Draws
+              </div>
               <div className="font-bold text-xl text-white">{playerStats?.draws || 0}</div>
             </div>
           </div>
@@ -287,8 +343,9 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button 
                 onClick={() => router.push("/create-match")}
-                className="ea-button"
+                className="ea-button flex items-center justify-center"
               >
+                <Image src="/fifa-logo.png" alt="FIFA" width={20} height={20} className="mr-2" />
                 New Match
               </button>
               
@@ -310,8 +367,9 @@ export default function Dashboard() {
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button 
                 onClick={() => router.push("/leaderboard")}
-                className="ea-button-secondary"
+                className="ea-button-secondary flex items-center justify-center"
               >
+                <Image src="/crown.png" alt="Crown" width={16} height={16} className="mr-2" />
                 Leaderboard
               </button>
             </div>
@@ -335,20 +393,30 @@ export default function Dashboard() {
                   // Determine if it was a win, loss or draw
                   let resultClass = "bg-[rgba(255,214,10,0.2)] text-[rgb(255,214,10)]"; // draw
                   let resultText = "DRAW";
+                  let resultIcon = "/handshake.png";
                   
                   if (playerScore > opponentScore) {
                     resultClass = "bg-[rgba(0,200,83,0.2)] text-[rgb(0,200,83)]";
                     resultText = "WIN";
+                    resultIcon = "/trophy.png";
                   } else if (playerScore < opponentScore) {
                     resultClass = "bg-[rgba(255,69,58,0.2)] text-[rgb(255,69,58)]";
                     resultText = "LOSS";
+                    resultIcon = "/defeat.png";
                   }
                   
                   return (
                     <div key={match.id} className="bg-black/20 border border-white/5 p-4">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-3">
-                          <div className={`px-2 py-1 rounded-sm ${resultClass} font-medium text-xs uppercase tracking-wider`}>
+                          <div className={`px-2 py-1 rounded-sm ${resultClass} font-medium text-xs uppercase tracking-wider flex items-center`}>
+                            <Image 
+                              src={resultIcon} 
+                              alt={resultText}
+                              width={16}
+                              height={16}
+                              className="mr-1"
+                            />
                             {resultText}
                           </div>
                           <span className="text-white text-lg font-bold">
@@ -410,11 +478,8 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#171721] p-6 rounded-lg max-w-md w-full border border-white/10">
             <h3 className="text-xl font-bold mb-4 text-white">Delete Match</h3>
-            <p className="text-white/80 mb-3">
+            <p className="text-white/80 mb-6">
               Are you sure you want to delete this match? This action cannot be undone and will adjust your player statistics accordingly.
-            </p>
-            <p className="text-white/60 text-sm mb-6">
-              <span className="text-blue-400">Note:</span> Match will be removed from your view and stats will be updated. Due to database permissions, the match may still exist in the database but won't appear in your listings.
             </p>
             <div className="flex justify-end space-x-3">
               <button

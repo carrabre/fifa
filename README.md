@@ -1,14 +1,34 @@
-# FIFA Tracker
+# Founders Inc FIFA Tracker
 
-A modern web application for tracking FIFA matches, player statistics, and team performance. Built with Next.js and Thirdweb for seamless Web3 integration.
+A modern web application for tracking FIFA matches between colleagues at Founders Inc. Built with Next.js and Thirdweb for Web3 integration, the app provides a sleek, professional interface for recording match results, viewing statistics, and competing on the leaderboard.
+
+![Founders Inc FIFA Tracker](/public/favicon.svg)
 
 ## Features
 
-- Connect your wallet to access personalized features
-- Track match results and statistics
-- View player performance metrics
-- Team management and analytics
-- Secure authentication with email and Google
+### User Authentication
+- Secure wallet-based authentication using Thirdweb
+- Personalized profiles with customizable display names
+- Seamless session management across browser sessions
+
+### Match Management
+- Record match results with scores and team selections
+- Track performance across all matches
+- View win/loss/draw statistics and goal metrics
+- Delete matches with automatic stat recalculation
+- Win/loss celebration screens with confetti effects
+
+### Statistics & Leaderboard
+- Real-time leaderboard with rankings
+- Detailed player statistics (wins, losses, draws, goals)
+- Consistent stat tracking across the application
+- Performance visualizations and win percentage calculations
+
+### UI/UX
+- Modern, dark-themed design inspired by EA FC24
+- Responsive layout for all screen sizes
+- Interactive components with hover states and transitions
+- Branded with Founders Inc colors and styling
 
 ## Getting Started
 
@@ -16,42 +36,46 @@ First, install the dependencies:
 
 ```bash
 npm install
-# or
-yarn
 ```
 
 Then, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
+
+## Data Management
+
+The application uses Supabase for data persistence with the following tables:
+- `users` - Stores user profiles with wallet addresses and display names
+- `matches` - Records all match data including scores and teams
+- `player_stats` - Maintains player statistics with real-time calculation
+
+## Usage Guide
+
+1. **Connect Wallet**: Start by connecting your wallet on the homepage
+2. **Create Profile**: Set your display name for others to recognize you
+3. **Record Matches**: Enter match results against opponents
+4. **View Stats**: Check your performance on the dashboard
+5. **Leaderboard**: See how you rank against colleagues
+6. **Match History**: View detailed match records and optionally delete matches
 
 ## Technology Stack
 
-- Next.js 15
-- React 19
-- Thirdweb for Web3 integration
-- AppChain for blockchain integration
-
-## Authentication
-
-The application uses Thirdweb's authentication system with the following features:
-- Email authentication
-- Google authentication
-- Wallet connection
-- Secure session management
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- **Frontend**: Next.js 15, React 19, TailwindCSS
+- **Authentication**: Thirdweb for wallet connections
+- **Database**: Supabase for persistent storage
+- **State Management**: React hooks for local state
 
 ## License
 
 This project is licensed under the MIT License.
+
+## Built By
+
+Developed for Founders Inc to promote friendly competition and track FIFA match results.
 
 ## Learn More
 

@@ -22,9 +22,6 @@ export async function setupSupabaseTables() {
       console.log("Connection test exception:", e);
     }
     
-    // Test permissions for common operations
-    await testDatabasePermissions();
-    
     // Setup users table if needed
     await createUsersTable();
     
@@ -61,74 +58,6 @@ export async function setupSupabaseTables() {
     console.error("Error in Supabase setup:", err);
     return false;
   }
-}
-
-// Function to test database permissions for debugging
-async function testDatabasePermissions() {
-  console.log("=== TESTING DATABASE PERMISSIONS ===");
-  
-  // Test READ permissions
-  try {
-    console.log("Testing READ permissions...");
-    const { data: readData, error: readError } = await supabase
-      .from('matches')
-      .select('id')
-      .limit(1);
-    
-    if (readError) {
-      console.error("READ permission test failed:", readError);
-    } else {
-      console.log("READ permission test passed");
-    }
-  } catch (e) {
-    console.error("READ permission test exception:", e);
-  }
-  
-  // Test INSERT permissions with dummy data
-  try {
-    console.log("Testing INSERT permissions...");
-    const testMatch = {
-      player1: 'permission_test_user',
-      player2: 'permission_test_user',
-      player1_score: 0,
-      player2_score: 0,
-      player1_team: 'test',
-      player2_team: 'test'
-    };
-    
-    const { data: insertData, error: insertError } = await supabase
-      .from('matches')
-      .insert([testMatch])
-      .select();
-    
-    if (insertError) {
-      console.error("INSERT permission test failed:", insertError);
-    } else {
-      console.log("INSERT permission test passed");
-      
-      // If insert worked, test DELETE permission
-      if (insertData && insertData.length > 0) {
-        const testId = insertData[0].id;
-        console.log(`Testing DELETE permissions for inserted match ${testId}...`);
-        
-        const { error: deleteError } = await supabase
-          .from('matches')
-          .delete()
-          .eq('id', testId);
-        
-        if (deleteError) {
-          console.error(`DELETE permission test failed for match ${testId}:`, deleteError);
-          console.log("⚠️ This explains why matches cannot be deleted from the database");
-        } else {
-          console.log(`DELETE permission test passed for match ${testId}`);
-        }
-      }
-    }
-  } catch (e) {
-    console.error("INSERT/DELETE permission test exception:", e);
-  }
-  
-  console.log("=== PERMISSION TESTS COMPLETE ===");
 }
 
 // Function to create users table

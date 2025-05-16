@@ -3,35 +3,108 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 255, 255, 255;
-  --background-end-rgb: 245, 245, 245;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 20, 20, 20;
-  }
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 0, 0, 0;
+  --accent-color: 3, 102, 214; /* Founders Inc blue accent color */
+  --secondary-color: 23, 23, 33;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background-color: rgb(var(--background-rgb));
+  font-family: var(--font-poppins), 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Dark Theme Background */
+.fi-bg {
+  background-color: rgb(var(--background-rgb));
+  position: relative;
+  overflow: hidden;
+}
+
+/* Button Styles */
+.ea-button {
+  @apply font-bold py-3 px-6 rounded-sm transition-colors duration-200 inline-flex items-center justify-center;
+  background-color: rgb(var(--accent-color));
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.ea-button:hover {
+  background-color: rgba(var(--accent-color), 0.8);
+}
+
+.ea-button-secondary {
+  @apply font-bold py-3 px-6 rounded-sm transition-colors duration-200 flex items-center justify-center;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.ea-button-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Cards */
+.fi-card {
+  background-color: rgba(23, 23, 33, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.25rem;
+}
+
+/* For backward compatibility */
+.fc24-card, .eftf-card {
+  background-color: rgba(23, 23, 33, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.25rem;
+}
+
+/* Typography */
+.fi-heading {
+  font-size: 2.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+
+/* For backward compatibility */
+.fc24-heading, .eftf-heading {
+  font-size: 2.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.1;
 }
 
 .input {
-  @apply shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight;
+  @apply shadow appearance-none rounded w-full py-3 px-4 leading-tight;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
 }
 
 .input:focus {
-  @apply outline-none ring-2 ring-blue-500;
+  @apply outline-none;
+  border-color: rgb(var(--accent-color));
+}
+
+.select {
+  @apply shadow appearance-none rounded w-full py-3 px-4 leading-tight;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.select:focus {
+  @apply outline-none;
+  border-color: rgb(var(--accent-color));
 }
 
 .btn {
@@ -40,4 +113,105 @@ body {
 
 .btn:disabled {
   @apply bg-gray-400 cursor-not-allowed;
+}
+
+/* Custom styles to replace the Yuan symbol in the Connect Button */
+.tw-connect-wallet button[data-test="connect-button"],
+.tw-connect-wallet button[data-test="connected-button"] {
+  display: flex;
+  align-items: center;
+}
+
+.tw-connect-wallet button[data-test="connect-button"]:before,
+.tw-connect-wallet button[data-test="connected-button"]:before {
+  content: '';
+  display: inline-block;
+  background-image: url('/coin.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Hide the original ThirdWeb currency icon in the button */
+.tw-connect-wallet button svg {
+  display: none !important;
+}
+
+/* Ensure text is visible */
+.tw-connect-wallet button span {
+  display: inline-block !important;
+}
+
+/* Theme specific overrides */
+.light-mode {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 255, 255, 255;
+  --secondary-color: 245, 245, 245;
+}
+
+.dark-mode {
+  /* Ensure default dark colours, mostly redundant but explicit */
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 0, 0, 0;
+  --secondary-color: 23, 23, 33;
+}
+
+/* Adjust component backgrounds for light mode */
+.light-mode .fi-bg {
+  background-color: rgb(var(--background-rgb));
+}
+
+.light-mode .fi-card {
+  background-color: rgba(var(--secondary-color), 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.light-mode .ea-button-secondary {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #000;
+}
+.light-mode .ea-button-secondary:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.light-mode .ea-button {
+  color: #fff; /* keep accent button white text */
+}
+
+.light-mode .input,
+.light-mode .select {
+  background-color: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #000;
+}
+
+.light-mode nav, .light-mode footer {
+  border-color: rgba(0,0,0,0.1);
+}
+
+.light-mode nav a {
+  color: rgba(0,0,0,0.7);
+}
+
+.light-mode nav a.border-b-2 {
+  color: #000 !important;
+  border-color: #000 !important;
+}
+
+.light-mode [class*="text-white"] {
+  color: #000 !important;
+}
+
+.light-mode [class*="border-white"] {
+  border-color: rgba(0,0,0,0.1) !important;
+}
+
+.light-mode [class*="bg-black\/20"],
+.light-mode [class*="bg-black\/30"],
+.light-mode [class*="bg-black\/40"],
+.light-mode [class*="bg-black\/80"] {
+  background-color: rgba(0, 0, 0, 0.05) !important;
 } 

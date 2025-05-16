@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={poppins.variable}>
+    <html lang="en" className={`${poppins.variable} dark-mode`}>
       <head>
         <title>Founders Inc FIFA Tracker</title>
         <meta name="description" content="Track your FIFA match results and rankings" />
