@@ -6,4 +6,10 @@ declare module "thirdweb/auth" {
 
 declare module "thirdweb/wallets" {
   export const privateKeyToAccount: any;
+}
+
+declare module "thirdweb/react" {
+  export const ThirdwebProvider: any;
+  export const ConnectButton: any;
+  export function useActiveAccount(): any;
 } 

@@ -10,6 +10,10 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
+// thirdweb now requires either `clientId` (public) or `secretKey` (server) when initialising the provider.
+// We use a public placeholder so the static export build succeeds even when the real env var is absent.
+const TW_CLIENT_ID = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "placeholder_client_id";
+
 export default function RootLayout({
   children,
 }: {
@@ -26,7 +30,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
       </head>
       <body>
-        <ThirdwebProvider>
+        <ThirdwebProvider clientId={TW_CLIENT_ID}>
           <div className="min-h-screen fi-bg">
             <Navbar />
             <div className="container mx-auto px-4 py-8 relative z-10">
