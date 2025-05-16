@@ -11,6 +11,14 @@ import { client } from "../../../lib/client";
 
 const privateKey = process.env.THIRDWEB_ADMIN_PRIVATE_KEY || "";
 
+// Provide a fallback secret key at build time so thirdweb/auth doesn't throw when neither
+// THIRDWEB_SECRET_KEY nor THIRDWEB_CLIENT_ID is set in the build environment.
+if (!process.env.THIRDWEB_SECRET_KEY) {
+	process.env.THIRDWEB_SECRET_KEY = "placeholder_secret_key";
+}
+
+const secretKeyEnv = process.env.THIRDWEB_SECRET_KEY;
+
 if (!privateKey) {
 	throw new Error("Missing THIRDWEB_ADMIN_PRIVATE_KEY in .env file.");
 }
