@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import { isLoggedIn } from "../connect-button/actions/auth";
 import { getPlayerMatches, getUserByWallet, deleteMatch, Match } from "../../lib/supabase";
 import Image from "next/image";
 
-export default function PlayerMatchesPage() {
+function PlayerMatchesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const playerId = searchParams.get('playerId');
@@ -26,22 +26,24 @@ export default function PlayerMatchesPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [matchToDelete, setMatchToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
 
-  // Function to load player match data
-  const loadPlayerMatchData = async (forceRefresh = false) => {
+  // Enhanced function to load player match data with force refresh option
+  const loadPlayerMatchData = useCallback(async (forceRefresh = false) => {
     if (!playerId) return;
     
     try {
       setRefreshing(true);
-      console.log(`[UI:PlayerMatches] Loading player match data for ${playerId} with forceRefresh=${forceRefresh}`);
+      console.log(`[UI:PlayerMatches] Loading player match data for ${playerId} with forceRefresh=${forceRefresh}, timestamp=${Date.now()}`);
       
       // If forcing refresh, add a delay to ensure database is in sync
       if (forceRefresh) {
         console.log("[UI:PlayerMatches] Force refresh requested, adding delay");
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      // Get player name
+      // Get player name with cache busting timestamp
+      const cacheBuster = Date.now();
       const userData = await getUserByWallet(playerId);
       if (userData) {
         setPlayerName(userData.display_name);
@@ -85,6 +87,7 @@ export default function PlayerMatchesPage() {
       });
       
       console.log(`[UI:PlayerMatches] Updated player stats: W${wins}/L${losses}/D${draws}`);
+      setLastRefreshTime(Date.now());
       
     } catch (error) {
       console.error(`[UI:PlayerMatches ERROR] Error fetching player matches:`, error);
@@ -92,8 +95,9 @@ export default function PlayerMatchesPage() {
       setRefreshing(false);
       setLoading(false);
     }
-  };
+  }, [playerId]);
 
+  // Initial load and auth check
   useEffect(() => {
     async function checkAuth() {
       if (!account) {
@@ -112,12 +116,59 @@ export default function PlayerMatchesPage() {
         return;
       }
 
-      await loadPlayerMatchData();
+      await loadPlayerMatchData(true); // Force refresh on initial load
     }
 
     checkAuth();
-  }, [account, router, playerId]);
+  }, [account, router, playerId, loadPlayerMatchData]);
 
+  // Enhanced refresh on window focus or visibility change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && playerId) {
+      // Refresh when returning to tab
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && account) {
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          // Only refresh if it's been more than 30 seconds since last refresh
+          if (timeSinceLastRefresh > 30000) {
+            console.log('[UI:PlayerMatches] Tab became visible, refreshing data');
+            loadPlayerMatchData(true);
+          }
+        }
+      };
+      
+      // Refresh when window regains focus
+      const handleFocus = () => {
+        if (account) {
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          // Only refresh if it's been more than 30 seconds since last refresh
+          if (timeSinceLastRefresh > 30000) {
+            console.log('[UI:PlayerMatches] Window regained focus, refreshing data');
+            loadPlayerMatchData(true);
+          }
+        }
+      };
+      
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Set interval to refresh data every 2 minutes if tab is active
+      const intervalId = setInterval(() => {
+        if (document.visibilityState === 'visible' && account) {
+          console.log('[UI:PlayerMatches] Auto-refreshing data (2 minute interval)');
+          loadPlayerMatchData();
+        }
+      }, 120000); // 2 minutes
+      
+      return () => {
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        clearInterval(intervalId);
+      };
+    }
+  }, [account, loadPlayerMatchData, playerId, lastRefreshTime]);
+
+  // Manual refresh handler with force refresh
   const handleRefresh = () => {
     loadPlayerMatchData(true);
   };
@@ -158,7 +209,36 @@ export default function PlayerMatchesPage() {
           return newMatches;
         });
         
-        // Refresh data to show updated matches and stats
+        // Recalculate stats immediately based on the updated matches
+        console.log(`[UI:PlayerMatches] Recalculating stats after deletion`);
+        setStats(prevStats => {
+          // Find the deleted match in our current matches to adjust stats
+          const deletedMatch = matches.find(match => match.id === matchToDelete);
+          if (deletedMatch) {
+            const isPlayer1 = deletedMatch.player1 === playerId;
+            const playerScore = isPlayer1 ? deletedMatch.player1_score : deletedMatch.player2_score;
+            const opponentScore = isPlayer1 ? deletedMatch.player2_score : deletedMatch.player1_score;
+            
+            // Determine which stat to decrement based on match result
+            const updatedStats = { ...prevStats };
+            updatedStats.goalsFor -= playerScore;
+            updatedStats.goalsAgainst -= opponentScore;
+            
+            if (playerScore > opponentScore) {
+              updatedStats.wins = Math.max(0, updatedStats.wins - 1);
+            } else if (playerScore < opponentScore) {
+              updatedStats.losses = Math.max(0, updatedStats.losses - 1);
+            } else {
+              updatedStats.draws = Math.max(0, updatedStats.draws - 1);
+            }
+            
+            console.log(`[UI:PlayerMatches] Updated stats: W${updatedStats.wins}/L${updatedStats.losses}/D${updatedStats.draws}`);
+            return updatedStats;
+          }
+          return prevStats;
+        });
+        
+        // Refresh data to show updated matches and stats from server
         console.log(`[UI:PlayerMatches] Refreshing data after deletion`);
         await loadPlayerMatchData(true); // Force a refresh
         console.log(`[UI:PlayerMatches] Data refresh complete`);
@@ -262,13 +342,16 @@ export default function PlayerMatchesPage() {
               // Determine if it was a win, loss or draw
               let resultClass = "bg-[rgba(255,214,10,0.2)] text-[rgb(255,214,10)]"; // draw
               let resultText = "DRAW";
+              let resultIcon = "/handshake.png";
               
               if (playerScore > opponentScore) {
                 resultClass = "bg-[rgba(0,200,83,0.2)] text-[rgb(0,200,83)]";
                 resultText = "WIN";
+                resultIcon = "/trophy.png";
               } else if (playerScore < opponentScore) {
                 resultClass = "bg-[rgba(255,69,58,0.2)] text-[rgb(255,69,58)]";
                 resultText = "LOSS";
+                resultIcon = "/defeat.png";
               }
               
               const playerTeam = isPlayer1 ? match.player1_team : match.player2_team;
@@ -278,7 +361,14 @@ export default function PlayerMatchesPage() {
                 <div key={match.id} className="bg-black/20 border border-white/5 p-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center space-x-3">
-                      <div className={`px-2 py-1 rounded-sm ${resultClass} font-medium text-xs uppercase tracking-wider`}>
+                      <div className={`px-2 py-1 rounded-sm ${resultClass} font-medium text-xs uppercase tracking-wider flex items-center`}>
+                        <Image 
+                          src={resultIcon} 
+                          alt={resultText}
+                          width={16}
+                          height={16}
+                          className="mr-1"
+                        />
                         {resultText}
                       </div>
                       <span className="text-white text-lg font-bold">
@@ -323,11 +413,8 @@ export default function PlayerMatchesPage() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#171721] p-6 rounded-lg max-w-md w-full border border-white/10">
             <h3 className="text-xl font-bold mb-4 text-white">Delete Match</h3>
-            <p className="text-white/80 mb-3">
+            <p className="text-white/80 mb-6">
               Are you sure you want to delete this match? This action cannot be undone and will adjust your player statistics accordingly.
-            </p>
-            <p className="text-white/60 text-sm mb-6">
-              <span className="text-blue-400">Note:</span> Match will be removed from your view and stats will be updated. Due to database permissions, the match may still exist in the database but won't appear in your listings.
             </p>
             <div className="flex justify-end space-x-3">
               <button
@@ -349,5 +436,13 @@ export default function PlayerMatchesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PlayerMatchesPage() {
+  return (
+    <Suspense>
+      <PlayerMatchesContent />
+    </Suspense>
   );
 } 

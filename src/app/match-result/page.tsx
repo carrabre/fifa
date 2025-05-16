@@ -1,9 +1,10 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
-import { getCurrentAddress, isLoggedIn } from "../connect-button/actions/auth";
+import { isLoggedIn } from "../connect-button/actions/auth";
 import { getUserByWallet, getMatchById, updateMatchWinner, Match, getUserInfo } from "../../lib/supabase";
 import Image from "next/image";
+import { useActiveAccount } from "thirdweb/react";
 
 function MatchResultContent() {
   const router = useRouter();
@@ -15,6 +16,7 @@ function MatchResultContent() {
   const [match, setMatch] = useState<Match | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const account = useActiveAccount();
   const [currentUserAddress, setCurrentUserAddress] = useState<string | null>(null);
   const [player1Name, setPlayer1Name] = useState<string | null>(null);
   const [player2Name, setPlayer2Name] = useState<string | null>(null);
@@ -29,9 +31,10 @@ function MatchResultContent() {
         return;
       }
       
-      // Get current user address
-      const address = await getCurrentAddress();
-      setCurrentUserAddress(address);
+      // Get current user address from connected wallet
+      if (account?.address) {
+        setCurrentUserAddress(account.address);
+      }
       
       // Check match ID
       if (!matchId) {
@@ -84,7 +87,7 @@ function MatchResultContent() {
     }
 
     checkAuthAndLoadMatch();
-  }, [matchId, router]);
+  }, [matchId, router, account]);
 
   const handleSelectWinner = async (winner: string) => {
     setSelectedWinner(winner);
